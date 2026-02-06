@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>0OS HACKER | for My Partner v1.6</title>
+    <style>
+        body { background: #0a0a0a; color: #dcdcdc; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        .gift-tag { position: absolute; top: 20px; right: 20px; color: #ff3e3e; font-size: 0.7rem; border: 1px solid #ff3e3e; padding: 5px 10px; border-radius: 3px; letter-spacing: 0.1em; }
+        .upload-section { margin-bottom: 40px; display: flex; gap: 15px; }
+        .upload-btn { background: #1a1a1a; color: #888; padding: 12px 20px; border: 1px solid #333; border-radius: 4px; cursor: pointer; font-size: 0.7rem; transition: 0.3s; }
+        .upload-btn:hover { background: #333; color: #fff; border-color: #666; }
+        #slider { width: 15%; height: 35px; appearance: none; background: #222; border: 1px solid #444; border-radius: 17px; outline: none; cursor: ew-resize; }
+        #slider::-webkit-slider-thumb { appearance: none; width: 25px; height: 25px; background: #fff; border-radius: 50%; box-shadow: 0 0 15px rgba(255,255,255,0.6); }
+        .label { margin-top: 20px; font-size: 0.8rem; letter-spacing: 0.3em; color: #555; text-transform: uppercase; }
+        #status { color: #888; font-weight: bold; margin-top: 5px; height: 1em; }
+        .philosophy { position: absolute; bottom: 30px; color: #333; font-size: 0.6rem; text-align: center; line-height: 1.6; letter-spacing: 0.1em; }
+    </style>
+</head>
+<body>
+    <div class="gift-tag">EXPERIMENTAL UNIT - 0OS</div>
+    <div class="upload-section">
+        <label class="upload-btn">LOAD BEAST<input type="file" id="beastFile" accept="audio/*" style="display:none"></label>
+        <label class="upload-btn">LOAD MAESTRO<input type="file" id="maestroFile" accept="audio/*" style="display:none"></label>
+    </div>
+    
+    <input type="range" id="slider" min="0" max="1000" value="0">
+    <div id="status" class="label">READY</div>
+    
+    <div class="philosophy">
+        "NOTHING SOUNDS UNTIL IT MOVES"<br>
+        VELOCITY = TIME & ENERGY
+    </div>
+
+<script>
+let audioCtx, beastNode, maestroNode, masterGain;
+let beastBuffer, maestroBuffer;
+let beastG, maestroG;
+let lastValue = 0;
+let stopTimer;
+let isInitialized = false;
+
+const slider = document.getElementById('slider');
+const statusText = document.getElementById('status');
+
+async function loadFile(file) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    // 読み込み完了後にノードを再構築フラグを立てる
+    isInitialized = false; 
+    return buffer;
+}
+
+document.getElementById('beastFile').addEventListener('change', async (e) => {
+    beastBuffer = await loadFile(e.target.files[0]);
+    statusText.innerText = "NEW BEAST LOADED";
+});
+
+document.getElementById('maestroFile').addEventListener('change', async (e) => {
+    maestroBuffer = await loadFile(e.target.files[0]);
+    statusText.innerText = "NEW MAESTRO LOADED";
+});
+
+function setupNodes() {
+    // 古いノードがあれば停止して破棄
+    if (beastNode) { try { beastNode.stop(); } catch(e){} }
+    if (maestroNode) { try { maestroNode.stop(); } catch(e){} }
+
+    if (!masterGain) {
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioCtx.destination);
+    }
+    masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
+
+    beastG = audioCtx.createGain();
+    maestroG = audioCtx.createGain();
+
+    beastNode = audioCtx.createBufferSource();
+    beastNode.buffer = beastBuffer;
+    beastNode.loop = true;
+
+    maestroNode = audioCtx.createBufferSource();
+    maestroNode.buffer = maestroBuffer;
+    maestroNode.loop = true;
+
+    beastNode.connect(beastG).connect(masterGain);
+    maestroNode.connect(maestroG).connect(masterGain);
+
+    beastNode.start();
+    maestroNode.start();
+    isInitialized = true;
+}
+
+slider.addEventListener('input', (e) => {
+    if (!beastBuffer || !maestroBuffer) {
+        statusText.innerText = "LOAD BOTH FILES";
+        return;
+    }
+    
+    // 未初期化、または新しくファイルが読み込まれた場合に再セットアップ
+    if (!isInitialized) setupNodes();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const currentVal = parseFloat(e.target.value);
+    const velocity = (currentVal - lastValue);
+    const pos = currentVal / 1000;
+
+    beastG.gain.setTargetAtTime(1 - pos, audioCtx.currentTime, 0.02);
+    maestroG.gain.setTargetAtTime(pos, audioCtx.currentTime, 0.02);
+
+    const vol = Math.min(Math.abs(velocity) / 12, 1.0);
+    masterGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.01);
+
+    const pitch = 1.0 + (velocity / 60);
+    beastNode.playbackRate.value = pitch;
+    maestroNode.playbackRate.value = pitch;
+
+    lastValue = currentVal;
+    statusText.innerText = velocity > 0 ? "FORWARD >>" : (velocity < 0 ? "<< REVERSE" : "STOPPED");
+
+    clearTimeout(stopTimer);
+    stopTimer = setTimeout(() => {
+        masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+        statusText.innerText = "STOPPED";
+    }, 50);
+});
+</script>
+</body>
+</html>
